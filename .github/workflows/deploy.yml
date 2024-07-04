@@ -1,0 +1,92 @@
+on:
+  workflow_call:
+    inputs:
+      app_name:
+        required: true
+        type: string
+      registry_host:
+        required: true
+        type: string
+      registry_username:
+        type: string
+        default: default
+      cloud_user_host:
+        required: true
+        type: string
+    secrets:
+      REGISTRY_PASSWORD:
+        required: true
+      SSH_PRIVATE_KEY:
+        required: true
+      ENV_VARS:
+        required: true
+    outputs:
+      image_url:
+        description: "Image URL"
+        value: ${{ jobs.build.outputs.image_url }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    concurrency: deploy
+    outputs:
+      image_url: ${{ steps.image_url.outputs.image_url }}
+    steps:
+    - id: image_url
+      name: Image URL
+      run: |
+        set -x
+        short_sha="$(echo ${{github.sha}} | cut -c 1-7)"
+        env_vars_sha="$(echo '${{ secrets.ENV_VARS }}' | md5sum | cut -c 1-7)"
+        tag="${short_sha}_${env_vars_sha}"
+        image_url="${{ inputs.registry_host }}/${{ inputs.app_name }}:${tag}"
+        echo $image_url
+        echo "image_url=$image_url" >> "$GITHUB_OUTPUT"
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Cache
+      id: cache-bundle
+      uses: actions/cache@v4
+      with:
+        path: |
+          var-bundle
+        key: ${{ runner.os }}-gems-${{ hashFiles('**/Gemfile.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-gems-
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    - name: Login to Docker Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ inputs.registry_host }}
+        username: ${{ inputs.registry_username }}
+        password: ${{ secrets.REGISTRY_PASSWORD }}
+    - name: inject cache into docker
+      uses: reproducible-containers/buildkit-cache-dance@v3.1.1
+      with:
+        cache-map: |
+          {
+            "var-bundle": "/tmp/bundle"
+          }
+    - name: Build and push
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        secrets: |
+          "env=${{ secrets.ENV_VARS }}"
+        tags: ${{ steps.image_url.outputs.image_url }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+    concurrency: deploy
+    steps:
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+      - name: Pre release
+        run: echo '${{ secrets.ENV_VARS }}' | ssh -o 'StrictHostKeyChecking no' -o ForwardAgent=yes ${{ inputs.cloud_user_host }} 'docker run --rm --env-file /dev/stdin ${{ needs.build.outputs.image_url }} ./bin/pre_release'
+      - name: Run deploy
+        run: echo '${{ secrets.ENV_VARS }}' | ssh -o 'StrictHostKeyChecking no' -o ForwardAgent=yes ${{ inputs.cloud_user_host }} './cloud/bin/stack_deploy.rb ${{ inputs.app_name }} ${{ needs.build.outputs.image_url }}'
