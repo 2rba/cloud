@@ -79,7 +79,7 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
         build-args: |
-          SECRET_VERSION=${{ secrets.ENV_VARS }}
+          ENV_VARS=${{ secrets.ENV_VARS }}
   release:
     runs-on: ubuntu-latest
     needs: build
