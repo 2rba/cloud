@@ -34,58 +34,63 @@ jobs:
     outputs:
       image_url: ${{ steps.image_url.outputs.image_url }}
     steps:
-    - id: image_url
-      name: Image URL
-      run: |
-        set -x
-        short_sha="$(echo ${{github.sha}} | cut -c 1-7)"
-        env_vars_sha="$(echo '${{ secrets.ENV_VARS }}' | md5sum | cut -c 1-7)"
-        tag="${short_sha}_${env_vars_sha}"
-        image_url="${{ inputs.registry_host }}/${{ inputs.app_name }}:${tag}"
-        echo $image_url
-        echo "image_url=$image_url" >> "$GITHUB_OUTPUT"
-    - id: cleaned_env_vars
-      name: Remove return characters from ENV_VARS
-      run: |
-        cleaned_env_vars=$(echo "${{ secrets.ENV_VARS }}" | tr -d '\r')
-        echo "${cleaned_env_vars}" | hexdump -c
-        echo cleaned_env_vars=\"${cleaned_env_vars}\" >> $GITHUB_ENV
-    - name: Checkout
-      uses: actions/checkout@v4
-    - name: Cache
-      id: cache-bundle
-      uses: actions/cache@v4
-      with:
-        path: |
-          var-bundle
-        key: ${{ runner.os }}-gems-${{ hashFiles('**/Gemfile.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-gems-
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-    - name: Login to Docker Registry
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ inputs.registry_host }}
-        username: ${{ inputs.registry_username }}
-        password: ${{ secrets.REGISTRY_PASSWORD }}
-    - name: inject cache into docker
-      uses: reproducible-containers/buildkit-cache-dance@v3.1.1
-      with:
-        cache-map: |
-          {
-            "var-bundle": "/tmp/bundle"
-          }
-    - name: Build and push
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        push: true
-        tags: ${{ steps.image_url.outputs.image_url }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-        build-args: |
-          "ENV_VARS=$(echo ${{ secrets.ENV_VARS }} | tr -d '\r')"
+      - id: image_url
+        name: Image URL
+        run: |
+          set -x
+          short_sha="$(echo ${{github.sha}} | cut -c 1-7)"
+          env_vars_sha="$(echo '${{ secrets.ENV_VARS }}' | md5sum | cut -c 1-7)"
+          tag="${short_sha}_${env_vars_sha}"
+          image_url="${{ inputs.registry_host }}/${{ inputs.app_name }}:${tag}"
+          echo $image_url
+          echo "image_url=$image_url" >> "$GITHUB_OUTPUT"
+      - id: cleaned_env_vars
+        uses: actions/github-script@v7
+        env:
+          ENV_VARS: "${{ secrets.ENV_VARS }}"
+        with:
+          script: |
+            const cleaned_env_vars=process.env.ENV_VARS.split(/[\n\r]+/).join("\n");
+            core.setOutput('cleaned_env_vars', cleaned_env_vars);
+          result-encoding: string
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Cache
+        id: cache-bundle
+        uses: actions/cache@v4
+        with:
+          path: |
+            var-bundle
+          key: ${{ runner.os }}-gems-${{ hashFiles('**/Gemfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-gems-
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to Docker Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ inputs.registry_host }}
+          username: ${{ inputs.registry_username }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+      - name: inject cache into docker
+        uses: reproducible-containers/buildkit-cache-dance@v3.1.1
+        with:
+          cache-map: |
+            {
+              "var-bundle": "/tmp/bundle"
+            }
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          secrets: |
+            "env=${{ steps.cleaned_env_vars.outputs.cleaned_env_vars }}"
+          tags: ${{ steps.image_url.outputs.image_url }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            "ENV_VARS=${{ steps.cleaned_env_vars.outputs.cleaned_env_vars }}"
   release:
     runs-on: ubuntu-latest
     needs: build
