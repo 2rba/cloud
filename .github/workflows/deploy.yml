@@ -48,7 +48,8 @@ jobs:
       name: Remove return characters from ENV_VARS
       run: |
         cleaned_env_vars=$(echo "${{ secrets.ENV_VARS }}" | tr -d '\r')
-        echo "cleaned_env_vars=${cleaned_env_vars}" >> $GITHUB_OUTPUT
+        echo "${cleaned_env_vars}" | hexdump
+        echo "cleaned_env_vars=${cleaned_env_vars}" >> $GITHUB_ENV
     - name: Checkout
       uses: actions/checkout@v4
     - name: Cache
@@ -84,7 +85,7 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
         build-args: |
-          "ENV_VARS=${{ steps.cleaned_env_vars.outputs.cleaned_env_vars }}"
+          "ENV_VARS=${{ env.cleaned_env_vars }}"
   release:
     runs-on: ubuntu-latest
     needs: build
