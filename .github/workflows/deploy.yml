@@ -85,7 +85,7 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
         build-args: |
-          "ENV_VARS=${{ env.cleaned_env_vars }}"
+          "ENV_VARS=$(echo ${{ secrets.ENV_VARS }} | tr -d '\r')"
   release:
     runs-on: ubuntu-latest
     needs: build
