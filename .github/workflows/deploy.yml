@@ -49,7 +49,7 @@ jobs:
       run: |
         cleaned_env_vars=$(echo "${{ secrets.ENV_VARS }}" | tr -d '\r')
         echo "${cleaned_env_vars}" | hexdump -c
-        echo "cleaned_env_vars=${cleaned_env_vars}" >> $GITHUB_ENV
+        echo cleaned_env_vars=\"${cleaned_env_vars}\" >> $GITHUB_ENV
     - name: Checkout
       uses: actions/checkout@v4
     - name: Cache
