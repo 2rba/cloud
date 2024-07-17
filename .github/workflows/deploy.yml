@@ -44,10 +44,11 @@ jobs:
         image_url="${{ inputs.registry_host }}/${{ inputs.app_name }}:${tag}"
         echo $image_url
         echo "image_url=$image_url" >> "$GITHUB_OUTPUT"
-    - name: Remove return characters from ENV_VARS
+    - id: cleaned_env_vars
+      name: Remove return characters from ENV_VARS
       run: |
         cleaned_env_vars=$(echo "${{ secrets.ENV_VARS }}" | tr -d '\r')
-        echo "CLEANED_ENV_VARS=${cleaned_env_vars}" >> $GITHUB_ENV
+        echo "cleaned_env_vars=${cleaned_env_vars}" >> $GITHUB_OUTPUT
     - name: Checkout
       uses: actions/checkout@v4
     - name: Cache
@@ -80,7 +81,7 @@ jobs:
         context: .
         push: true
         secrets: |
-          "env=${{ env.CLEANED_ENV_VARS }}"
+          "env=${{ steps.cleaned_env_vars.outputs.cleaned_env_vars }}"
         tags: ${{ steps.image_url.outputs.image_url }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
