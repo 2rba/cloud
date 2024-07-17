@@ -47,7 +47,6 @@ jobs:
     - name: Remove return characters from ENV_VARS
       run: |
         cleaned_env_vars=$(echo "${{ secrets.ENV_VARS }}" | tr -d '\r')
-        echo "::add-mask::$cleaned_env_vars"
         echo "CLEANED_ENV_VARS=${cleaned_env_vars}" >> $GITHUB_ENV
     - name: Checkout
       uses: actions/checkout@v4
