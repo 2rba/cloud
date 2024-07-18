@@ -1,0 +1,32 @@
+on:
+  workflow_call:
+    inputs:
+      app_name:
+        required: true
+        type: string
+      image_url:
+        required: true
+        type: string
+      cloud_user_host:
+        required: true
+        type: string
+    secrets:
+      SSH_PRIVATE_KEY:
+        required: true
+      ENV_VARS:
+        required: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ inputs.app_name }}-deploy
+      cancel-in-progress: true
+    steps:
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+      - name: Pre release
+        run: echo '${{ secrets.ENV_VARS }}' | ssh -o 'StrictHostKeyChecking no' -o ForwardAgent=yes ${{ inputs.cloud_user_host }} 'docker run --rm --env-file /dev/stdin ${{ inputs.image_url }} ./bin/pre_release'
+      - name: Run deploy
+        run: echo '${{ secrets.ENV_VARS }}' | ssh -o 'StrictHostKeyChecking no' -o ForwardAgent=yes ${{ inputs.cloud_user_host }} './cloud/bin/stack_deploy.rb ${{ inputs.app_name }} ${{ inputs.image_url }}'
